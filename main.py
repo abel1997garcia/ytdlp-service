@@ -24,6 +24,7 @@ def download_audio(req: DownloadRequest):
                 "--audio-format", "mp3",
                 "--audio-quality", "5",
                 "--no-playlist",
+                "--impersonate", "chrome",
                 "-o", output_path,
                 req.url,
             ],
