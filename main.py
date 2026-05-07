@@ -5,12 +5,18 @@ import subprocess, uuid, os
 
 app = FastAPI()
 
+# Ruta donde se montan las cookies de Instagram en el contenedor
+COOKIES_INSTAGRAM = "/cookies/instagram_cookies.txt"
+
+
 class DownloadRequest(BaseModel):
     url: str
+
 
 @app.get("/")
 def root():
     return {"status": "ok", "service": "ytdlp-audio-downloader"}
+
 
 def cleanup_file(path: str):
     """Borra el archivo después de servirlo."""
@@ -20,22 +26,36 @@ def cleanup_file(path: str):
     except Exception:
         pass
 
+
+def needs_instagram_cookies(url: str) -> bool:
+    """Detecta si la URL es de Instagram."""
+    return "instagram.com" in url.lower()
+
+
 @app.post("/download-audio")
 def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
     file_id = str(uuid.uuid4())
     output_path = f"/tmp/{file_id}.mp3"
+
+    # Comando base con impersonation (necesario para TikTok)
+    cmd = [
+        "yt-dlp",
+        "-x",
+        "--audio-format", "mp3",
+        "--audio-quality", "5",
+        "--no-playlist",
+        "--impersonate", "chrome",
+    ]
+
+    # Si es Instagram y existen cookies, las añade
+    if needs_instagram_cookies(req.url) and os.path.exists(COOKIES_INSTAGRAM):
+        cmd.extend(["--cookies", COOKIES_INSTAGRAM])
+
+    cmd.extend(["-o", output_path, req.url])
+
     try:
         subprocess.run(
-            [
-                "yt-dlp",
-                "-x",
-                "--audio-format", "mp3",
-                "--audio-quality", "5",
-                "--no-playlist",
-                "--impersonate", "chrome",
-                "-o", output_path,
-                req.url,
-            ],
+            cmd,
             check=True,
             timeout=180,
             capture_output=True,
