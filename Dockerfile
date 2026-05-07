@@ -4,7 +4,11 @@ RUN apt-get update && \
     apt-get install -y ffmpeg curl && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir yt-dlp fastapi uvicorn python-multipart
+RUN pip install --no-cache-dir \
+    "yt-dlp[default,curl-cffi]" \
+    fastapi \
+    uvicorn \
+    python-multipart
 
 WORKDIR /app
 COPY main.py .
