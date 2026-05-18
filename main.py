@@ -33,12 +33,17 @@ def is_tiktok(url: str) -> bool:
 def is_instagram(url: str) -> bool:
     return "instagram.com" in url.lower()
 
-@app.post("/download-audio")
-def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
-    file_id = str(uuid.uuid4())
-    input_file = f"/tmp/{file_id}.mp4"
-    mp3_path = f"/tmp/{file_id}.mp3"
+def has_audio_stream(filepath: str) -> bool:
+    result = subprocess.run([
+        "ffprobe", "-v", "error",
+        "-select_streams", "a",
+        "-show_entries", "stream=codec_type",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        filepath
+    ], capture_output=True, timeout=30)
+    return b"audio" in result.stdout
 
+def download_file(url: str, output: str, fmt: str, cookies: str = None) -> subprocess.CompletedProcess:
     cmd = [
         "yt-dlp",
         "--no-playlist",
@@ -49,31 +54,46 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
         "--no-abort-on-error",
         "--impersonate", "chrome",
         "--merge-output-format", "mp4",
-        "-o", input_file,
+        "-f", fmt,
+        "-o", output,
     ]
+    if cookies and os.path.exists(cookies):
+        cmd.extend(["--cookies", cookies])
+    cmd.append(url)
+    return subprocess.run(cmd, timeout=900, capture_output=True)
 
+@app.post("/download-audio")
+def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
+    file_id = str(uuid.uuid4())
+    input_file = f"/tmp/{file_id}.mp4"
+    mp3_path = f"/tmp/{file_id}.mp3"
+
+    # Determinar cookies y formatos a intentar según plataforma
     if is_youtube(req.url):
-        cmd.extend(["-f", "bestaudio/best"])
-        if os.path.exists(COOKIES_YOUTUBE):
-            cmd.extend(["--cookies", COOKIES_YOUTUBE])
+        formats = ["bestaudio/best"]
+        cookies = COOKIES_YOUTUBE
     elif is_tiktok(req.url):
-        cmd.extend(["-f", "h264_540p/h264/b"])
-        if os.path.exists(COOKIES_TIKTOK):
-            cmd.extend(["--cookies", COOKIES_TIKTOK])
+        formats = ["h264/bestaudio", "b"]
+        cookies = COOKIES_TIKTOK
     elif is_instagram(req.url):
-        cmd.extend(["-f", "b"])
-        if os.path.exists(COOKIES_INSTAGRAM):
-            cmd.extend(["--cookies", COOKIES_INSTAGRAM])
+        formats = ["b"]
+        cookies = COOKIES_INSTAGRAM
     else:
-        cmd.extend(["-f", "b"])
-
-    cmd.append(req.url)
+        formats = ["b"]
+        cookies = None
 
     try:
-        result = subprocess.run(cmd, timeout=900, capture_output=True)
+        # Intentar cada formato hasta que el archivo tenga audio
+        downloaded = False
+        for fmt in formats:
+            cleanup_file(input_file)
+            download_file(req.url, input_file, fmt, cookies)
+            if os.path.exists(input_file) and has_audio_stream(input_file):
+                downloaded = True
+                break
 
-        if not os.path.exists(input_file):
-            raise HTTPException(500, f"Error yt-dlp: {result.stderr.decode()[-500:]}")
+        if not downloaded:
+            raise HTTPException(500, "No se pudo descargar audio válido")
 
         ff = subprocess.run([
             "ffmpeg", "-y", "-i", input_file,
