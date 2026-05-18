@@ -53,22 +53,18 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
     ]
 
     if is_youtube(req.url):
-        # YouTube tiene streams de audio separados
         cmd.extend(["-f", "bestaudio/best"])
         if os.path.exists(COOKIES_YOUTUBE):
             cmd.extend(["--cookies", COOKIES_YOUTUBE])
     elif is_tiktok(req.url):
-        # TikTok solo tiene video+audio combinado
         cmd.extend(["-f", "h264/b"])
         if os.path.exists(COOKIES_TIKTOK):
             cmd.extend(["--cookies", COOKIES_TIKTOK])
     elif is_instagram(req.url):
-        # Instagram solo tiene video+audio combinado
         cmd.extend(["-f", "b"])
         if os.path.exists(COOKIES_INSTAGRAM):
             cmd.extend(["--cookies", COOKIES_INSTAGRAM])
     else:
-        # Facebook y cualquier otra plataforma
         cmd.extend(["-f", "b"])
 
     cmd.append(req.url)
@@ -77,7 +73,7 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
         result = subprocess.run(cmd, timeout=900, capture_output=True)
 
         if not os.path.exists(input_file):
-            raise HTTPException(500, f"Error yt-dlp: {result.stderr.decode()[:500]}")
+            raise HTTPException(500, f"Error yt-dlp: {result.stderr.decode()[-500:]}")
 
         ff = subprocess.run([
             "ffmpeg", "-y", "-i", input_file,
@@ -90,7 +86,7 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
         cleanup_file(input_file)
 
         if ff.returncode != 0 or not os.path.exists(mp3_path):
-            raise HTTPException(500, f"Error ffmpeg: {ff.stderr.decode()[-500]}")
+            raise HTTPException(500, f"Error ffmpeg: {ff.stderr.decode()[-500:]}")
 
         background_tasks.add_task(cleanup_file, mp3_path)
         return FileResponse(mp3_path, media_type="audio/mpeg", filename=f"{file_id}.mp3")
