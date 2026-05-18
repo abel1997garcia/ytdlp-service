@@ -10,7 +10,7 @@ COOKIES_YOUTUBE = "/cookies/youtube_cookies.txt"
 
 class DownloadRequest(BaseModel):
     url: str
-    normalize: bool = True
+    normalize: bool = False
 
 @app.get("/")
 def root():
@@ -58,10 +58,10 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
     cmd.extend(["-o", raw_path, req.url])
 
     try:
-        subprocess.run(cmd, check=True, timeout=900, capture_output=True)
+        result = subprocess.run(cmd, timeout=900, capture_output=True)
 
         if not os.path.exists(raw_path):
-            raise HTTPException(500, "El archivo no se generó")
+            raise HTTPException(500, f"Error yt-dlp: {result.stderr.decode()[:500]}")
 
         output_path = raw_path
 
@@ -85,10 +85,6 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
         background_tasks.add_task(cleanup_file, output_path)
         return FileResponse(output_path, media_type="audio/mpeg", filename=f"{file_id}.mp3")
 
-    except subprocess.CalledProcessError as e:
-        cleanup_file(raw_path)
-        cleanup_file(final_path)
-        raise HTTPException(500, f"Error yt-dlp: {e.stderr.decode()[:500]}")
     except subprocess.TimeoutExpired:
         cleanup_file(raw_path)
         cleanup_file(final_path)
