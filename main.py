@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-import subprocess, uuid, os
+import subprocess, uuid, os, glob
 
 app = FastAPI()
 
@@ -36,14 +36,11 @@ def needs_tiktok_cookies(url: str) -> bool:
 @app.post("/download-audio")
 def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
     file_id = str(uuid.uuid4())
-    raw_path = f"/tmp/{file_id}.mp3"
-    final_path = f"/tmp/{file_id}_final.mp3"
+    raw_template = f"/tmp/{file_id}.%(ext)s"
+    mp3_path = f"/tmp/{file_id}.mp3"
 
     cmd = [
         "yt-dlp",
-        "-x",
-        "--audio-format", "mp3",
-        "--audio-quality", "0",
         "--no-playlist",
         "--no-part",
         "--retries", "10",
@@ -51,7 +48,8 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
         "--extractor-retries", "5",
         "--no-abort-on-error",
         "--impersonate", "chrome",
-        "--embed-metadata",
+        "-f", "bestaudio",
+        "-o", raw_template,
     ]
 
     if needs_youtube_cookies(req.url) and os.path.exists(COOKIES_YOUTUBE):
@@ -61,37 +59,37 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
     elif needs_instagram_cookies(req.url) and os.path.exists(COOKIES_INSTAGRAM):
         cmd.extend(["--cookies", COOKIES_INSTAGRAM])
 
-    cmd.extend(["-o", raw_path, req.url])
+    cmd.append(req.url)
 
     try:
         result = subprocess.run(cmd, timeout=900, capture_output=True)
 
-        if not os.path.exists(raw_path):
+        # Buscar el archivo descargado (puede ser .mp4, .m4a, .webm, etc.)
+        downloaded = glob.glob(f"/tmp/{file_id}.*")
+        downloaded = [f for f in downloaded if not f.endswith(".mp3")]
+
+        if not downloaded:
             raise HTTPException(500, f"Error yt-dlp: {result.stderr.decode()[:500]}")
 
-        output_path = raw_path
+        input_file = downloaded[0]
 
-        if req.normalize:
-            ff = subprocess.run([
-                "ffmpeg", "-y", "-i", raw_path,
-                "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
-                "-codec:a", "libmp3lame",
-                "-b:a", "128k",
-                final_path,
-            ], capture_output=True, timeout=600)
+        # Convertir a mp3 con ffmpeg explícitamente
+        ff = subprocess.run([
+            "ffmpeg", "-y", "-i", input_file,
+            "-codec:a", "libmp3lame",
+            "-b:a", "128k",
+            mp3_path,
+        ], capture_output=True, timeout=600)
 
-            if ff.returncode != 0:
-                cleanup_file(raw_path)
-                cleanup_file(final_path)
-                raise HTTPException(500, f"Error ffmpeg: {ff.stderr.decode()[:500]}")
+        cleanup_file(input_file)
 
-            cleanup_file(raw_path)
-            output_path = final_path
+        if ff.returncode != 0 or not os.path.exists(mp3_path):
+            raise HTTPException(500, f"Error ffmpeg: {ff.stderr.decode()[:300]}")
 
-        background_tasks.add_task(cleanup_file, output_path)
-        return FileResponse(output_path, media_type="audio/mpeg", filename=f"{file_id}.mp3")
+        background_tasks.add_task(cleanup_file, mp3_path)
+        return FileResponse(mp3_path, media_type="audio/mpeg", filename=f"{file_id}.mp3")
 
     except subprocess.TimeoutExpired:
-        cleanup_file(raw_path)
-        cleanup_file(final_path)
+        for f in glob.glob(f"/tmp/{file_id}.*"):
+            cleanup_file(f)
         raise HTTPException(504, "Timeout descargando audio")
