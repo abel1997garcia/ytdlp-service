@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-import subprocess, uuid, os, glob
+import subprocess, uuid, os
 
 app = FastAPI()
 
@@ -24,19 +24,19 @@ def cleanup_file(path: str):
     except Exception:
         pass
 
-def needs_instagram_cookies(url: str) -> bool:
-    return "instagram.com" in url.lower()
-
-def needs_youtube_cookies(url: str) -> bool:
+def is_youtube(url: str) -> bool:
     return any(x in url.lower() for x in ["youtube.com", "youtu.be"])
 
-def needs_tiktok_cookies(url: str) -> bool:
+def is_tiktok(url: str) -> bool:
     return any(x in url.lower() for x in ["tiktok.com", "vm.tiktok.com"])
+
+def is_instagram(url: str) -> bool:
+    return "instagram.com" in url.lower()
 
 @app.post("/download-audio")
 def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
     file_id = str(uuid.uuid4())
-    raw_template = f"/tmp/{file_id}.%(ext)s"
+    input_file = f"/tmp/{file_id}.mp4"
     mp3_path = f"/tmp/{file_id}.mp3"
 
     cmd = [
@@ -48,29 +48,36 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
         "--extractor-retries", "5",
         "--no-abort-on-error",
         "--impersonate", "chrome",
-        "-f", "bestaudio/best",
-        "-o", raw_template,
+        "--merge-output-format", "mp4",
+        "-o", input_file,
     ]
 
-    if needs_youtube_cookies(req.url) and os.path.exists(COOKIES_YOUTUBE):
-        cmd.extend(["--cookies", COOKIES_YOUTUBE])
-    elif needs_tiktok_cookies(req.url) and os.path.exists(COOKIES_TIKTOK):
-        cmd.extend(["--cookies", COOKIES_TIKTOK])
-    elif needs_instagram_cookies(req.url) and os.path.exists(COOKIES_INSTAGRAM):
-        cmd.extend(["--cookies", COOKIES_INSTAGRAM])
+    if is_youtube(req.url):
+        # YouTube tiene streams de audio separados
+        cmd.extend(["-f", "bestaudio/best"])
+        if os.path.exists(COOKIES_YOUTUBE):
+            cmd.extend(["--cookies", COOKIES_YOUTUBE])
+    elif is_tiktok(req.url):
+        # TikTok solo tiene video+audio combinado
+        cmd.extend(["-f", "b"])
+        if os.path.exists(COOKIES_TIKTOK):
+            cmd.extend(["--cookies", COOKIES_TIKTOK])
+    elif is_instagram(req.url):
+        # Instagram solo tiene video+audio combinado
+        cmd.extend(["-f", "b"])
+        if os.path.exists(COOKIES_INSTAGRAM):
+            cmd.extend(["--cookies", COOKIES_INSTAGRAM])
+    else:
+        # Facebook y cualquier otra plataforma
+        cmd.extend(["-f", "b"])
 
     cmd.append(req.url)
 
     try:
         result = subprocess.run(cmd, timeout=900, capture_output=True)
 
-        downloaded = glob.glob(f"/tmp/{file_id}.*")
-        downloaded = [f for f in downloaded if not f.endswith(".mp3")]
-
-        if not downloaded:
+        if not os.path.exists(input_file):
             raise HTTPException(500, f"Error yt-dlp: {result.stderr.decode()[:500]}")
-
-        input_file = downloaded[0]
 
         ff = subprocess.run([
             "ffmpeg", "-y", "-i", input_file,
@@ -89,6 +96,6 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
         return FileResponse(mp3_path, media_type="audio/mpeg", filename=f"{file_id}.mp3")
 
     except subprocess.TimeoutExpired:
-        for f in glob.glob(f"/tmp/{file_id}.*"):
-            cleanup_file(f)
+        cleanup_file(input_file)
+        cleanup_file(mp3_path)
         raise HTTPException(504, "Timeout descargando audio")
