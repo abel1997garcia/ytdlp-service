@@ -90,7 +90,7 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
         cleanup_file(input_file)
 
         if ff.returncode != 0 or not os.path.exists(mp3_path):
-            raise HTTPException(500, f"Error ffmpeg: {ff.stderr.decode()[:300]}")
+            raise HTTPException(500, f"Error ffmpeg: {ff.stderr.decode()[-500]}")
 
         background_tasks.add_task(cleanup_file, mp3_path)
         return FileResponse(mp3_path, media_type="audio/mpeg", filename=f"{file_id}.mp3")
