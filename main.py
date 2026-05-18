@@ -7,6 +7,7 @@ app = FastAPI()
 
 COOKIES_INSTAGRAM = "/cookies/instagram_cookies.txt"
 COOKIES_YOUTUBE = "/cookies/youtube_cookies.txt"
+COOKIES_TIKTOK = "/cookies/tiktok_cookies.txt"
 
 class DownloadRequest(BaseModel):
     url: str
@@ -28,6 +29,9 @@ def needs_instagram_cookies(url: str) -> bool:
 
 def needs_youtube_cookies(url: str) -> bool:
     return any(x in url.lower() for x in ["youtube.com", "youtu.be"])
+
+def needs_tiktok_cookies(url: str) -> bool:
+    return any(x in url.lower() for x in ["tiktok.com", "vm.tiktok.com"])
 
 @app.post("/download-audio")
 def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
@@ -52,6 +56,8 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
 
     if needs_youtube_cookies(req.url) and os.path.exists(COOKIES_YOUTUBE):
         cmd.extend(["--cookies", COOKIES_YOUTUBE])
+    elif needs_tiktok_cookies(req.url) and os.path.exists(COOKIES_TIKTOK):
+        cmd.extend(["--cookies", COOKIES_TIKTOK])
     elif needs_instagram_cookies(req.url) and os.path.exists(COOKIES_INSTAGRAM):
         cmd.extend(["--cookies", COOKIES_INSTAGRAM])
 
