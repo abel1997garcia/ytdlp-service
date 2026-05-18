@@ -74,13 +74,13 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
         input_file = downloaded[0]
 
         # Convertir a mp3 con ffmpeg explícitamente
-        ff = subprocess.run([
-            "ffmpeg", "-y", "-i", input_file,
-            "-codec:a", "libmp3lame",
-            "-b:a", "128k",
-            mp3_path,
-        ], capture_output=True, timeout=600)
-
+         ff = subprocess.run([
+              "ffmpeg", "-y", "-i", input_file,
+              "-vn",
+              "-codec:a", "libmp3lame",
+              "-b:a", "128k",
+              mp3_path,
+            ], capture_output=True, timeout=600)
         cleanup_file(input_file)
 
         if ff.returncode != 0 or not os.path.exists(mp3_path):
