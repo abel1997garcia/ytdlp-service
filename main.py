@@ -64,7 +64,6 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
     try:
         result = subprocess.run(cmd, timeout=900, capture_output=True)
 
-        # Buscar el archivo descargado (puede ser .mp4, .m4a, .webm, etc.)
         downloaded = glob.glob(f"/tmp/{file_id}.*")
         downloaded = [f for f in downloaded if not f.endswith(".mp3")]
 
@@ -73,14 +72,14 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
 
         input_file = downloaded[0]
 
-        # Convertir a mp3 con ffmpeg explícitamente
-         ff = subprocess.run([
-              "ffmpeg", "-y", "-i", input_file,
-              "-vn",
-              "-codec:a", "libmp3lame",
-              "-b:a", "128k",
-              mp3_path,
-            ], capture_output=True, timeout=600)
+        ff = subprocess.run([
+            "ffmpeg", "-y", "-i", input_file,
+            "-vn",
+            "-codec:a", "libmp3lame",
+            "-b:a", "128k",
+            mp3_path,
+        ], capture_output=True, timeout=600)
+
         cleanup_file(input_file)
 
         if ff.returncode != 0 or not os.path.exists(mp3_path):
