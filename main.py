@@ -48,7 +48,7 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
         "--extractor-retries", "5",
         "--no-abort-on-error",
         "--impersonate", "chrome",
-        "-f", "bestaudio",
+        "-f", "bestaudio/best",
         "-o", raw_template,
     ]
 
