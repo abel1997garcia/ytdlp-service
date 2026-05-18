@@ -73,7 +73,7 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
         formats = ["bestaudio/best"]
         cookies = COOKIES_YOUTUBE
     elif is_tiktok(req.url):
-        formats = ["h264/bestaudio", "b"]
+        formats = ["h264/mp4[vcodec^=h264]"]
         cookies = COOKIES_TIKTOK
     elif is_instagram(req.url):
         formats = ["b"]
