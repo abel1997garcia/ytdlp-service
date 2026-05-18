@@ -59,7 +59,7 @@ def download_audio(req: DownloadRequest, background_tasks: BackgroundTasks):
             cmd.extend(["--cookies", COOKIES_YOUTUBE])
     elif is_tiktok(req.url):
         # TikTok solo tiene video+audio combinado
-        cmd.extend(["-f", "b"])
+        cmd.extend(["-f", "h264/b"])
         if os.path.exists(COOKIES_TIKTOK):
             cmd.extend(["--cookies", COOKIES_TIKTOK])
     elif is_instagram(req.url):
